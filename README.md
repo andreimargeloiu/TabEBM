@@ -5,9 +5,11 @@
 </h2>
 
 <div align="center">
+
 [![Arxiv-Paper](https://img.shields.io/badge/Arxiv-Paper-yellow)](https://arxiv.org/abs/2409.16118)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)
+
 </div>
 
 Official code for the paper ["TabEBM: A Tabular Data Augmentation Method with Distinct Class-Specific Energy-Based Models"](https://arxiv.org/abs/2409.16118), published in the Thirty-Eighth Annual Conference on Neural Information Processing Systems (NeurIPS 2024).
@@ -25,6 +27,7 @@ Authored by [Andrei Margeloiu](https://www.linkedin.com/in/andreimargeloiu/), [X
 ## 📖 Citation
 
 For attribution in academic contexts, please cite this work as:
+
 ```
 @article{margeloiu2024tabebm,
 	title={TabEBM: A Tabular Data Augmentation Method with Distinct Class-Specific Energy-Based Models},
@@ -36,48 +39,49 @@ For attribution in academic contexts, please cite this work as:
 
 ## 🔑 Features
 
-* `TabEBM.py` contains (i) the implementation of TabEBM, and (ii) a helper function `plot_TabEBM_energy_contour` to show the energy contour (or unnormalized probability) approximated by TabEBM
-* `TabEBM_approximated_density.ipynb` shows the TabEBM approximation of the density of the real data distribution
-* `TabEBM_generate_data.ipynb` shows how to generate data using TabEBM
+- `TabEBM.py` contains (i) the implementation of TabEBM, and (ii) a helper function `plot_TabEBM_energy_contour` to show the energy contour (or unnormalized probability) approximated by TabEBM
+- `TabEBM_approximated_density.ipynb` shows the TabEBM approximation of the density of the real data distribution
+- `TabEBM_generate_data.ipynb` shows how to generate data using TabEBM
 
 ## 🚀 Installation
 
-* Create `conda` environment
+- Create `conda` environment
+
 ```
 conda create -n tabebm python=3.10.12
 conda activate tabebm
 ```
 
-* Install dependencies
+- Install dependencies
+
 ```
 pip install --no-cache-dir -r requirements.txt
 ```
 
 # 💥 Running Experiments with TabEBM
 
-* [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/andreimargeloiu/TabEBM/blob/main/TabEBM_generate_data.ipynb) [Tutorial 0: Generate synthetic data with TabEBM](https://github.com/andreimargeloiu/TabEBM/blob/main/TabEBM_generate_data.ipynb)
+- [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/andreimargeloiu/TabEBM/blob/main/TabEBM_generate_data.ipynb) [Tutorial 0: Generate synthetic data with TabEBM](https://github.com/andreimargeloiu/TabEBM/blob/main/TabEBM_generate_data.ipynb)
 
-    * The library can generate synthetic data with three lines of code.
+  - The library can generate synthetic data with three lines of code.
 
-      ```python
-      from TabEBM import TabEBM
-      
-      tabebm = TabEBM()
-      augmented_data = tabebm.generate(X_train, y_train, num_samples=100)
-      
-      # Output:
-      # augmented_data[class_id] = numpy.ndarray of generated data for a specific ’’class_id‘‘
-      ```
+    ```python
+    from TabEBM import TabEBM
 
-* [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/andreimargeloiu/TabEBM/blob/main/TabEBM_approximated_density.ipynb) [Tutorial 1: Analyse the learned data distribution by TabEBM](https://github.com/andreimargeloiu/TabEBM/blob/main/TabEBM_approximated_density.ipynb)
+    tabebm = TabEBM()
+    augmented_data = tabebm.generate(X_train, y_train, num_samples=100)
 
-    * The library allows computation of TabEBM’s energy function and the unnormalised data density.
-    
-      ```python
-      from TabEBM import plot_TabEBM_energy_contour
-      
-      X, y = circles_dataset(n_samples=300, noise=2)
-      plot_tabebm_probabilities(X, y, title_prefix='(noise=2)', h=0.2)
-      plt.show()
-      ```
+    # Output:
+    # augmented_data[class_id] = numpy.ndarray of generated data for a specific ’’class_id‘‘
+    ```
 
+- [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/andreimargeloiu/TabEBM/blob/main/TabEBM_approximated_density.ipynb) [Tutorial 1: Analyse the learned data distribution by TabEBM](https://github.com/andreimargeloiu/TabEBM/blob/main/TabEBM_approximated_density.ipynb)
+
+  - The library allows computation of TabEBM’s energy function and the unnormalised data density.
+
+    ```python
+    from TabEBM import plot_TabEBM_energy_contour
+
+    X, y = circles_dataset(n_samples=300, noise=2)
+    plot_tabebm_probabilities(X, y, title_prefix='(noise=2)', h=0.2)
+    plt.show()
+    ```
