@@ -4,9 +4,11 @@
   <img src="https://s2.loli.net/2024/10/01/uJjKCNfqhFcXyPM.png" height="200px">
 </h2>
 
+<div align="center">
 [![Arxiv-Paper](https://img.shields.io/badge/Arxiv-Paper-yellow)](https://arxiv.org/abs/2409.16118)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)
+</div>
 
 Official code for the paper ["TabEBM: A Tabular Data Augmentation Method with Distinct Class-Specific Energy-Based Models"](https://arxiv.org/abs/2409.16118), published in the Thirty-Eighth Annual Conference on Neural Information Processing Systems (NeurIPS 2024).
 
@@ -14,7 +16,7 @@ Authored by [Andrei Margeloiu](https://www.linkedin.com/in/andreimargeloiu/), [X
 
 ## 📌 Overview
 
-![TabEBM](https://s2.loli.net/2024/10/01/DkilOftvqHExYQd.png)
+![image-20241001125640288](https://s2.loli.net/2024/10/01/5loipZJdOrtVS3Q.png)
 
 **TL;DR:** We introduce a new data augmentation method for tabular data, which train class-specific generators.
 
@@ -53,7 +55,7 @@ pip install --no-cache-dir -r requirements.txt
 
 # 💥 Running Experiments with TabEBM
 
-* [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/andreimargeloiu/TabEBM/blob/main/TabEBM_generate_data.ipynb)[Tutorial 0: Generate synthetic data with TabEBM](https://github.com/andreimargeloiu/TabEBM/blob/main/TabEBM_generate_data.ipynb)
+* [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/andreimargeloiu/TabEBM/blob/main/TabEBM_generate_data.ipynb) [Tutorial 0: Generate synthetic data with TabEBM](https://github.com/andreimargeloiu/TabEBM/blob/main/TabEBM_generate_data.ipynb)
 
     * The library can generate synthetic data with three lines of code.
 
@@ -67,7 +69,7 @@ pip install --no-cache-dir -r requirements.txt
       # augmented_data[class_id] = numpy.ndarray of generated data for a specific ’’class_id‘‘
       ```
 
-* [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/andreimargeloiu/TabEBM/blob/main/TabEBM_approximated_density.ipynb)[Tutorial 1: Analyse the learned data distribution by TabEBM](https://github.com/andreimargeloiu/TabEBM/blob/main/TabEBM_approximated_density.ipynb)
+* [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/andreimargeloiu/TabEBM/blob/main/TabEBM_approximated_density.ipynb) [Tutorial 1: Analyse the learned data distribution by TabEBM](https://github.com/andreimargeloiu/TabEBM/blob/main/TabEBM_approximated_density.ipynb)
 
     * The library allows computation of TabEBM’s energy function and the unnormalised data density.
     
