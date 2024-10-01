@@ -58,6 +58,12 @@ conda activate tabebm
 pip install --no-cache-dir -r requirements.txt
 ```
 
+>If you already have a conda environment with common repositories, we also prepare a tiny list of required dependencies in `requirements_tiny.txt`, which can be installed via
+>
+>```bash
+>pip install --no-cache-dir -r requirements_tiny.txt
+>```
+
 # 💥 Running Experiments with TabEBM
 
 - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/andreimargeloiu/TabEBM/blob/main/TabEBM_generate_data.ipynb) [Tutorial 0: Generate synthetic data with TabEBM](https://github.com/andreimargeloiu/TabEBM/blob/main/TabEBM_generate_data.ipynb)
@@ -66,10 +72,10 @@ pip install --no-cache-dir -r requirements.txt
 
     ```python
     from TabEBM import TabEBM
-
+  
     tabebm = TabEBM()
     augmented_data = tabebm.generate(X_train, y_train, num_samples=100)
-
+  
     # Output:
     # augmented_data[class_id] = numpy.ndarray of generated data for a specific ’’class_id‘‘
     ```
@@ -80,7 +86,7 @@ pip install --no-cache-dir -r requirements.txt
 
     ```python
     from TabEBM import plot_TabEBM_energy_contour
-
+    
     X, y = circles_dataset(n_samples=300, noise=2)
     plot_tabebm_probabilities(X, y, title_prefix='(noise=2)', h=0.2)
     plt.show()
