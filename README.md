@@ -55,14 +55,18 @@ conda activate tabebm
 - Install dependencies
 
 ```
-pip install --no-cache-dir -r requirements.txt
+pip install --no-cache-dir -r requirements_full.txt
 ```
 
->If you already have a conda environment with common repositories, we also prepare a tiny list of required dependencies in `requirements_tiny.txt`, which can be installed via
+> If you already have a conda environment with common repositories, we also prepare a small list of required dependencies in `requirements_min.txt`, which can be installed via
 >
->```bash
->pip install --no-cache-dir -r requirements_tiny.txt
->```
+> ```bash
+> pip install --no-cache-dir -r requirements_min.txt
+> ```
+
+However, we note that `requirements_min.txt` may only enable TabEBM to run on your local machine, and we do recommend using `requirements_full.txt` for full reproducibility of the results reported in the paper. This is because different versions of some core packages can result in different results, even the well-established `NumPy`. Below is the officailly recommended practice from `NumPy`:
+
+> _"The standard practice now for bit-for-bit reproducible research is to **pin all of the versions of code of your software stack**, possibly down to the OS itself ... We now have virtual machines. Those who need to reproduce simulations exactly now can (and ought to) do so by using the exact same version of numpy. We do not need to maintain stream-compatibility across numpy versions to help them."_
 
 # 💥 Running Experiments with TabEBM
 
@@ -72,10 +76,10 @@ pip install --no-cache-dir -r requirements.txt
 
     ```python
     from TabEBM import TabEBM
-  
+
     tabebm = TabEBM()
     augmented_data = tabebm.generate(X_train, y_train, num_samples=100)
-  
+
     # Output:
     # augmented_data[class_id] = numpy.ndarray of generated data for a specific ’’class_id‘‘
     ```
@@ -86,7 +90,7 @@ pip install --no-cache-dir -r requirements.txt
 
     ```python
     from TabEBM import plot_TabEBM_energy_contour
-    
+
     X, y = circles_dataset(n_samples=300, noise=2)
     plot_tabebm_probabilities(X, y, title_prefix='(noise=2)', h=0.2)
     plt.show()
