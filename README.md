@@ -64,7 +64,7 @@ pip install --no-cache-dir -r requirements_full.txt
 > pip install --no-cache-dir -r requirements_min.txt
 > ```
 
-However, we note that `requirements_min.txt` may **only** enable TabEBM to run on your local machine, and we recommend using `requirements_full.txt` to fully reproduce the results reported in the paper. This is because different versions of some core packages can result in different results, even the well-established `NumPy`. Below is the [officially recommended practice from `NumPy`](https://numpy.org/neps/nep-0019-rng-policy.html):
+However, we note that `requirements_min.txt` may **only** enable TabEBM to run on your local machine, and we recommend using `requirements_full.txt` to fully reproduce the results reported in the paper. This is because different versions of some core packages can lead to different results, even the well-established `NumPy`. Below is the [officially recommended practice from `NumPy`](https://numpy.org/neps/nep-0019-rng-policy.html):
 
 > _"The standard practice now for bit-for-bit reproducible research is to **pin all of the versions of code of your software stack**, possibly down to the OS itself ... We now have virtual machines. Those who need to reproduce simulations exactly now can (and ought to) do so by using the exact same version of numpy. We do not need to maintain stream-compatibility across numpy versions to help them."_
 
