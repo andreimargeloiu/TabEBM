@@ -49,7 +49,7 @@ For attribution in academic contexts, please cite this work as:
 pip install tabebm
 ```
 
-### Reproduce the results reported in the paper 
+### To reproduce the results reported in the paper 
 
 - Create `conda` environment
 
