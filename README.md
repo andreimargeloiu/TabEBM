@@ -45,6 +45,12 @@ For attribution in academic contexts, please cite this work as:
 
 ## 🚀 Installation
 
+```
+pip install tabebm
+```
+
+### Reproduce the results reported in the paper 
+
 - Create `conda` environment
 
 ```
@@ -52,19 +58,15 @@ conda create -n tabebm python=3.10.12
 conda activate tabebm
 ```
 
-- Install dependencies
+- Install tabebm and dependencies
 
 ```
-pip install --no-cache-dir -r requirements_full.txt
+git clone https://github.com/andreimargeloiu/TabEBM
+cd TabEBM/
+pip install --no-cache-dir -r requirements_paper.txt
+pip install .
 ```
 
-> If you already have a conda environment with common repositories, we also prepare a small list of required dependencies in `requirements.txt`, which can be installed via
->
-> ```bash
-> pip install --no-cache-dir -r requirements.txt
-> ```
-
-However, we note that `requirementsn.txt` may **only** enable TabEBM to run on your local machine. Following the [officially recommended practice from `NumPy`](https://numpy.org/neps/nep-0019-rng-policy.html), we recommend using `requirements_full.txt` to secure fully consistent behaviour of TabEBM as reported in the paper.
 
 # 💥 Running Experiments with TabEBM
 
