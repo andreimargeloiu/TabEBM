@@ -6,8 +6,8 @@
 
 <div align="center">
 
-[![Arxiv-Paper](https://img.shields.io/badge/Arxiv-Paper-yellow)](https://arxiv.org/abs/2409.16118)
-![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+[![Arxiv-Paper](https://img.shields.io/badge/Arxiv-Paper-olivegreen)](https://arxiv.org/abs/2409.16118)
+[![License: Apache License 2.0](https://img.shields.io/badge/License-Apache%202.0-olivegreen.svg)](https://github.com/andreimargeloiu/TabEBM/blob/master/LICENSE)
 ![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)
 
 </div>
