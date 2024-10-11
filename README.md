@@ -58,19 +58,17 @@ conda activate tabebm
 pip install --no-cache-dir -r requirements_full.txt
 ```
 
-> If you already have a conda environment with common repositories, we also prepare a small list of required dependencies in `requirements_min.txt`, which can be installed via
+> If you already have a conda environment with common repositories, we also prepare a small list of required dependencies in `requirements.txt`, which can be installed via
 >
 > ```bash
-> pip install --no-cache-dir -r requirements_min.txt
+> pip install --no-cache-dir -r requirements.txt
 > ```
 
-However, we note that `requirements_min.txt` may **only** enable TabEBM to run on your local machine, and we recommend using `requirements_full.txt` to fully reproduce the results reported in the paper. This is because different versions of some core packages can lead to different results, even the well-established `NumPy`. Below is the [officially recommended practice from `NumPy`](https://numpy.org/neps/nep-0019-rng-policy.html):
-
-> _"The standard practice now for bit-for-bit reproducible research is to **pin all of the versions of code of your software stack**, possibly down to the OS itself ... We now have virtual machines. Those who need to reproduce simulations exactly now can (and ought to) do so by using the exact same version of numpy. We do not need to maintain stream-compatibility across numpy versions to help them."_
+However, we note that `requirementsn.txt` may **only** enable TabEBM to run on your local machine. Following the [officially recommended practice from `NumPy`](https://numpy.org/neps/nep-0019-rng-policy.html), we recommend using `requirements_full.txt` to secure fully consistent behaviour of TabEBM as reported in the paper.
 
 # 💥 Running Experiments with TabEBM
 
-- [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/andreimargeloiu/TabEBM/blob/main/TabEBM_generate_data.ipynb) [Tutorial 0: Generate synthetic data with TabEBM](https://github.com/andreimargeloiu/TabEBM/blob/main/TabEBM_generate_data.ipynb)
+- [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/andreimargeloiu/TabEBM/blob/main/TabEBM_generate_data.ipynb) [Tutorial 1: Generate synthetic data with TabEBM](https://github.com/andreimargeloiu/TabEBM/blob/main/TabEBM_generate_data.ipynb)
 
   - The library can generate synthetic data with three lines of code.
 
@@ -84,7 +82,7 @@ However, we note that `requirements_min.txt` may **only** enable TabEBM to run o
     # augmented_data[class_id] = numpy.ndarray of generated data for a specific ’’class_id‘‘
     ```
 
-- [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/andreimargeloiu/TabEBM/blob/main/TabEBM_approximated_density.ipynb) [Tutorial 1: Analyse the learned data distribution by TabEBM](https://github.com/andreimargeloiu/TabEBM/blob/main/TabEBM_approximated_density.ipynb)
+- [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/andreimargeloiu/TabEBM/blob/main/TabEBM_approximated_density.ipynb) [Tutorial 2: Analyse the learned data distribution by TabEBM](https://github.com/andreimargeloiu/TabEBM/blob/main/TabEBM_approximated_density.ipynb)
 
   - The library allows computation of TabEBM’s energy function and the unnormalised data density.
 
@@ -95,3 +93,7 @@ However, we note that `requirements_min.txt` may **only** enable TabEBM to run o
     plot_tabebm_probabilities(X, y, title_prefix='(noise=2)', h=0.2)
     plt.show()
     ```
+
+- [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/andreimargeloiu/TabEBM/blob/main/TabEBM_approximated_density.ipynb) [Tutorial 3: Augment real-world data with TabEBM](https://github.com/andreimargeloiu/TabEBM/blob/main/TabEBM_approximated_density.ipynb)
+
+  - We provide a minial example of using TabEBM to augmenta real-world datasets for improvied downstream performance.
