@@ -8,7 +8,10 @@
 
 [![Arxiv-Paper](https://img.shields.io/badge/Arxiv-Paper-olivegreen)](https://arxiv.org/abs/2409.16118)
 [![License: Apache License 2.0](https://img.shields.io/badge/License-Apache%202.0-olivegreen.svg)](https://github.com/andreimargeloiu/TabEBM/blob/master/LICENSE)
-![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)
+
+[![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/andreimargeloiu/TabEBM/blob/main/TabEBM_approximated_density.ipynb)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/release/python-3100/)
+[![Downloads](https://static.pepy.tech/badge/tabebm)](https://pepy.tech/project/tabebm)
 
 </div>
 
@@ -49,7 +52,7 @@ For attribution in academic contexts, please cite this work as:
 pip install tabebm
 ```
 
-### To reproduce the results reported in the paper 
+### To reproduce the results reported in the paper
 
 - Create `conda` environment
 
@@ -66,7 +69,6 @@ cd TabEBM/
 pip install --no-cache-dir -r requirements_paper.txt
 pip install .
 ```
-
 
 # 💥 Running Experiments with TabEBM
 
