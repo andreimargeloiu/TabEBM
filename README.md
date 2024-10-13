@@ -11,7 +11,7 @@
 
 [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/andreimargeloiu/TabEBM/blob/main/TabEBM_approximated_density.ipynb)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/release/python-3100/)
-[![Downloads](https://static.pepy.tech/badge/tabebm)](https://pepy.tech/project/tabebm)
+[![Downloads](https://static.pepy.tech/badge/tabebm)](https://pypi.org/project/tabebm/)
 
 </div>
 
@@ -77,7 +77,7 @@ pip install .
   - The library can generate synthetic data with three lines of code.
 
     ```python
-    from TabEBM import TabEBM
+    from tabebm.TabEBM import TabEBM
 
     tabebm = TabEBM()
     augmented_data = tabebm.generate(X_train, y_train, num_samples=100)
@@ -91,7 +91,7 @@ pip install .
   - The library allows computation of TabEBM’s energy function and the unnormalised data density.
 
     ```python
-    from TabEBM import plot_TabEBM_energy_contour
+    from tabebm.TabEBM import plot_TabEBM_energy_contour
 
     X, y = circles_dataset(n_samples=300, noise=2)
     plot_tabebm_probabilities(X, y, title_prefix='(noise=2)', h=0.2)
