@@ -100,4 +100,4 @@ pip install .
 
 - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/andreimargeloiu/TabEBM/blob/main/TabEBM_approximated_density.ipynb) [Tutorial 3: Augment real-world data with TabEBM](https://github.com/andreimargeloiu/TabEBM/blob/main/TabEBM_approximated_density.ipynb)
 
-  - We provide a minial example of using TabEBM to augmenta real-world datasets for improvied downstream performance.
+  - We provide a minial example of using TabEBM to augment a real-world datasets for improvied downstream performance.
