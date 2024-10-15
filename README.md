@@ -72,7 +72,7 @@ pip install .
 
 # 💥 Running Experiments with TabEBM
 
-- [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/andreimargeloiu/TabEBM/blob/main/TabEBM_generate_data.ipynb) [Tutorial 1: Generate synthetic data with TabEBM](https://github.com/andreimargeloiu/TabEBM/blob/main/TabEBM_generate_data.ipynb)
+- [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/andreimargeloiu/TabEBM/blob/main/tutorials/tutorial1_generate_data.ipynb) [Tutorial 1: Generate synthetic data with TabEBM](https://github.com/andreimargeloiu/TabEBM/blob/main/tutorials/tutorial1_generate_data.ipynb)
 
   - The library can generate synthetic data with three lines of code.
 
@@ -86,7 +86,7 @@ pip install .
     # augmented_data[class_id] = numpy.ndarray of generated data for a specific ’’class_id‘‘
     ```
 
-- [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/andreimargeloiu/TabEBM/blob/main/TabEBM_approximated_density.ipynb) [Tutorial 2: Analyse the learned data distribution by TabEBM](https://github.com/andreimargeloiu/TabEBM/blob/main/TabEBM_approximated_density.ipynb)
+- [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/andreimargeloiu/TabEBM/blob/main/tutorials/tutorial2_approximated_density.ipynb) [Tutorial 2: Analyse the learned data distribution by TabEBM](https://github.com/andreimargeloiu/TabEBM/blob/main/tutorials/tutorial2_approximated_density.ipynb)
 
   - The library allows computation of TabEBM’s energy function and the unnormalised data density.
 
@@ -98,6 +98,6 @@ pip install .
     plt.show()
     ```
 
-- [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/andreimargeloiu/TabEBM/blob/main/TabEBM_approximated_density.ipynb) [Tutorial 3: Augment real-world data with TabEBM](https://github.com/andreimargeloiu/TabEBM/blob/main/TabEBM_approximated_density.ipynb)
+- [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/andreimargeloiu/TabEBM/blob/main/tutorials/tutorial3_augment_real_world_data.ipynb) [Tutorial 3: Augment real-world data with TabEBM](https://github.com/andreimargeloiu/TabEBM/blob/main/tutorials/tutorial3_augment_real_world_data.ipynb)
 
   - We provide a minial example of using TabEBM to augment a real-world datasets for improvied downstream performance.
