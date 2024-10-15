@@ -9,7 +9,7 @@
 [![Arxiv-Paper](https://img.shields.io/badge/Arxiv-Paper-olivegreen)](https://arxiv.org/abs/2409.16118)
 [![License: Apache License 2.0](https://img.shields.io/badge/License-Apache%202.0-olivegreen.svg)](https://github.com/andreimargeloiu/TabEBM/blob/master/LICENSE)
 
-[![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/andreimargeloiu/TabEBM/blob/main/TabEBM_approximated_density.ipynb)
+[![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/andreimargeloiu/TabEBM/blob/main/tutorials/tutorial3_augment_real_world_data.ipynb)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/release/python-3100/)
 [![Downloads](https://static.pepy.tech/badge/tabebm)](https://pypi.org/project/tabebm/)
 
