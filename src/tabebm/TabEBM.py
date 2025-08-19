@@ -42,7 +42,10 @@ def seed_everything(seed):
 
 
 class TabEBM:
-    def __init__(self):
+    def __init__(
+        self,
+        max_data_size: int = 10000,
+    ):
         no_preprocessing_inference_config = ModelInterfaceConfig(
             FINGERPRINT_FEATURE=False,
             FEATURE_SHIFT_METHOD=None,
@@ -64,27 +67,46 @@ class TabEBM:
             device=self.device,
         )
 
+        self.max_data_size = max_data_size
+
     def generate(
         self,
         X,
-        y,  # The data must have been processed using TabEBM.add_surrogate_negative_samples()
-        num_samples,  # Number of samples to generate (per class)
-        starting_point_noise_std=0.01,  # SGLD noise standard deviation to initialise the starting points
-        sgld_step_size=0.1,  # SGLD step size
-        sgld_noise_std=0.01,  # SGLD noise standard deviation
-        sgld_steps=200,  # Number of SGLD steps
-        distance_negative_class=5,  # Distance of the "negative samples" created to have a different class
+        y,
+        num_samples,
+        starting_point_noise_std=0.01,
+        sgld_step_size=0.1,
+        sgld_noise_std=0.01,
+        sgld_steps=200,
+        distance_negative_class=5,
         seed=42,
-        debug=False,  # if True,  print debug information
+        debug=False,
     ):
-        if not (isinstance(X, torch.Tensor) or isinstance(X, np.ndarray)):
-            X = to_numpy(X)
-        if not (isinstance(y, torch.Tensor) or isinstance(y, np.ndarray)):
-            y = to_numpy(y).reshape(-1)
+        """
+        Generate synthetic samples using SGLD sampling.
 
+        Args:
+            X: The input features.
+            y: The target labels.
+            num_samples: The number of samples to generate.
+            starting_point_noise_std: The standard deviation of the noise added to the starting points.
+            sgld_step_size: The step size for the SGLD sampling.
+            sgld_noise_std: The standard deviation of the noise added during SGLD sampling.
+            sgld_steps: The number of SGLD steps to take.
+            distance_negative_class: The distance to the negative class samples.
+            seed: The random seed for reproducibility.
+            debug: Whether to print debug information.
+
+        Returns:
+            dict: A dictionary containing the generated samples for each class.
+        """
+        # === Preprocess the data ===
+        data_dict = self.preprocess(X, y)
+
+        # === Call the internal sampling method ===
         res = self._sampling_internal(
-            X=X,
-            y=y,
+            X=data_dict["X"],
+            y=data_dict["y"],
             num_samples=num_samples,
             starting_point_noise_std=starting_point_noise_std,
             sgld_step_size=sgld_step_size,
@@ -95,6 +117,7 @@ class TabEBM:
             debug=debug,
         )
 
+        # === Postprocess the results ===
         augmented_data = defaultdict(list)
         for target_class in range(len(np.unique(to_numpy(y)))):
             augmented_data[f"class_{int(target_class)}"] = res[f"class_{int(target_class)}"]["sampling_paths"]
@@ -104,16 +127,35 @@ class TabEBM:
     def _sampling_internal(
         self,
         X,
-        y,  # The data must have been processed using add_surrogate_negative_samples()
-        num_samples,  # number of samples to generate
-        starting_point_noise_std=0.01,  # Noise std to compute the starting points for the sampling
+        y,
+        num_samples,
+        starting_point_noise_std=0.01,
         sgld_step_size=0.1,
         sgld_noise_std=0.01,
         sgld_steps=200,
-        distance_negative_class=5,  # Distance of the "negative samples" created to have a different class
+        distance_negative_class=5,
         seed=42,
-        debug=False,  # if True, print debug information
+        debug=False,
     ):
+        """
+        Internal method for SGLD sampling.
+
+        Args:
+            X: The input features.
+            y: The target labels.
+            num_samples: The number of samples to generate.
+            starting_point_noise_std: The standard deviation of the noise added to the starting points.
+            sgld_step_size: The step size for the SGLD sampling.
+            sgld_noise_std: The standard deviation of the noise added during SGLD sampling.
+            sgld_steps: The number of SGLD steps to take.
+            distance_negative_class: The distance to the negative class samples.
+            seed: The random seed for reproducibility.
+            debug: Whether to print debug information.
+
+        Returns:
+            dict: A dictionary containing the generated samples for each class.
+        """
+
         if debug:
             print("Inside TabEBM sampling")
             print(f"sgld_step_size = {sgld_step_size}")
@@ -175,6 +217,29 @@ class TabEBM:
 
         return synthetic_data_per_class
 
+    def preprocess(self, X, y):
+        if not isinstance(X, np.ndarray):
+            X = to_numpy(X)
+        if not isinstance(y, np.ndarray):
+            y = to_numpy(y).reshape(-1)
+
+        # Note: For very large datasets (>self.max_data_size), TabPFN-v2 will split it into multiple datasets internally
+        # However, the internal splitting does not gurantee stratification of all **categorical features**
+        # As a result, some categorical features may be constant after internal splitting, then forcibly removed
+        # For TabPFN-v2 (2.1.2), such removal of constant features cannot be bypassed or muted
+        # Thus, we manually sample X and y before passing them to the model
+        if X.shape[0] > self.max_data_size:
+            X_sampled, _, y_sampled, _ = train_test_split(
+                X,
+                y,
+                train_size=self.max_data_size,
+                random_state=42,
+                stratify=y,
+            )
+            X, y = X_sampled, y_sampled
+
+        return {"X": X, "y": y}
+
     def get_ebm_datatset(self, X, y, target_class, distance_negative_class):
         X_one_class = X[y == target_class]
         X_ebm, y_ebm = TabEBM.add_surrogate_negative_samples(
@@ -225,7 +290,7 @@ class TabEBM:
 
     def prepare_tabpfn_batch_data(self, X, y):
         splitter = partial(TabEBM.train_test_split_allow_full_train, test_size=0, random_state=42, shuffle=False)
-        batched_datasets = self.model.get_preprocessed_datasets(X, y, splitter, max_data_size=10000)
+        batched_datasets = self.model.get_preprocessed_datasets(X, y, splitter, max_data_size=self.max_data_size)
 
         batch_dataloader = DataLoader(
             batched_datasets,

@@ -12,7 +12,7 @@ URL = "https://github.com/andreimargeloiu/TabEBM"
 EMAIL = "silencejiang12138@gmail.com"
 AUTHOR = "Andrei Margeloiu, Xiangjian Jiang, Nikola Simidjievski, Mateja Jamnik"
 REQUIRES_PYTHON = ">=3.10.0"
-VERSION = "2024.10.6"
+VERSION = "2025.08.19"
 
 REQUIRED = [
     "matplotlib",
