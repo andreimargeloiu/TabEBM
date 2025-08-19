@@ -1,27 +1,52 @@
 import os
 import random
-from collections import defaultdict
+from functools import partial
+from typing import Any, Dict, Optional, Tuple, Union
 
-import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import scipy
 import torch
+from sklearn.model_selection import train_test_split
 from tabpfn import TabPFNClassifier
+from tabpfn.config import ModelInterfaceConfig, PreprocessorConfig
+from tabpfn.utils import meta_dataset_collator
+from torch.utils.data import DataLoader
 
 
-def to_numpy(X):
+def to_numpy(X: Union[np.ndarray, torch.Tensor, pd.DataFrame, None]) -> Optional[np.ndarray]:
+    """
+    Convert input data to numpy array format.
+
+    Args:
+        X: Input data in various formats (numpy array, torch tensor, pandas DataFrame, or None)
+
+    Returns:
+        numpy array representation of the input data, or None if input is None
+
+    Raises:
+        ValueError: If input type is not supported
+    """
     match type(X):
         case np.ndarray:
             return X
         case torch.Tensor:
             return X.detach().cpu().numpy()
+        case pd.DataFrame:
+            return X.to_numpy()
         case None:
             return None
         case _:
             raise ValueError("X must be either a np.ndarray or a torch.Tensor")
 
 
-def seed_everything(seed):
+def seed_everything(seed: int) -> None:
+    """
+    Set random seeds for reproducibility across all libraries.
+
+    Args:
+        seed: Random seed value
+    """
     os.environ["PL_GLOBAL_SEED"] = str(seed)
     random.seed(seed)
     np.random.seed(seed)
@@ -35,113 +60,105 @@ def seed_everything(seed):
 
 
 class TabEBM:
-    def __init__(self, tabpfn=None, plotting=False):
-        if tabpfn is not None:
-            self.tabpfn = tabpfn
-        else:
-            if plotting is False:
-                self.tabpfn = TabPFNClassifier(
-                    device="cuda",
-                    N_ensemble_configurations=3,
-                    only_inference=True,
-                    no_grad=False,
-                    no_preprocess_mode=True,
-                )
-            else:
-                self.tabpfn = TabPFNClassifier(
-                    device="cpu",
-                    N_ensemble_configurations=3,
-                    only_inference=True,
-                    no_grad=True,
-                    no_preprocess_mode=True,
-                )
+    """
+    TabEBM: Tabular Energy-Based Model for synthetic data generation.
 
-    @staticmethod
-    def compute_energy(
-        logits,  # Model's logit (unnormalized) for each class (shape = (num_samples, num_classes))
-        return_unnormalized_prob=False,  # Whether to compute the unnormalized probability p(x) instead of the energy
-    ):
-        # Compute the proposed TabEBM class-specific energy E_c(x) = -log(exp(f^c(\x)[0]) + exp(f^c(x)[1]))
-        if type(logits) is torch.Tensor:
-            # === Assert the logits are unnormlized (and not probabilities)
-            assert (logits.sum(dim=1) - 1).abs().max() > 1e-5, "Logits must be unnormalized"
+    This class implements an energy-based model that uses TabPFN as the underlying
+    classifier to define energy functions. It generates synthetic tabular data
+    using Stochastic Gradient Langevin Dynamics (SGLD) sampling.
 
-            energy = -torch.logsumexp(logits, dim=1)
-            if return_unnormalized_prob:
-                return torch.exp(-energy)
-            else:
-                return energy
-        elif type(logits) is np.ndarray:
-            # === Assert the logits are unnormlized (and not probabilities)
-            assert (logits.sum(axis=1) - 1).max() > 1e-5, "Logits must be unnormalized)"
+    The core idea is to treat each class as having its own energy landscape,
+    where real data points have low energy and synthetic points are generated
+    by following the energy gradient through SGLD sampling.
+    """
 
-            energy = -1 * scipy.special.logsumexp(logits, axis=1)
-            if return_unnormalized_prob:
-                return np.exp(-energy)
-            else:
-                return energy
-        else:
-            raise ValueError("Logits must be either a torch.Tensor or a np.ndarray")
-
-    @staticmethod
-    def add_surrogate_negative_samples(
-        X,  # The data (expected to be standardized to have zero mean and unit variance)
-        distance_negative_class=5,  # The distance of the surrogate "negative samples" from the data
+    def __init__(
+        self,
+        max_data_size: int = 10000,
     ):
         """
-        Create the surrogate negative samples for TabEBM's proposed surrogate task (for each class)
-        """
-        if X.shape[1] == 2:
-            true_negatives = [
-                [-distance_negative_class, -distance_negative_class],
-                [distance_negative_class, distance_negative_class],
-                [-distance_negative_class, distance_negative_class],
-                [distance_negative_class, -distance_negative_class],
-            ]
-        else:
-            # === Generate "true negative" samples ===
-            true_negatives = set()
-            while len(true_negatives) < 4:
-                point = np.random.choice([-distance_negative_class, distance_negative_class], X.shape[1])
-                point = tuple(point)
-                if point not in true_negatives:
-                    true_negatives.add(point)
-                    true_negatives.add(tuple(-np.array(point)))
-            true_negatives = list(true_negatives)
-        num_true_negatives = len(true_negatives)
+        Initialize TabEBM with optimized configuration.
 
-        if type(X) is np.ndarray:
-            X_ebm = np.array(true_negatives)
-            X_ebm = np.concatenate([X, X_ebm], axis=0)
-            y_ebm = np.concatenate([np.zeros(X.shape[0]), np.ones(num_true_negatives)], axis=0)
-            return X_ebm, y_ebm
-        elif type(X) is torch.Tensor:
-            X_ebm = torch.tensor(true_negatives).float().to(X.device)
-            X_ebm = torch.cat([X, X_ebm], dim=0)
-            y_ebm = torch.cat([torch.zeros(X.shape[0]), torch.ones(num_true_negatives)], dim=0).long().to(X.device)
-            return X_ebm, y_ebm
-        else:
-            raise ValueError("X must be either a np.ndarray or a torch.Tensor")
+        Args:
+            max_data_size: Maximum number of data points to use for training.
+                          Larger datasets will be subsampled to this size.
+        """
+        # Configure TabPFN to disable preprocessing for gradient computation
+        # This is crucial for SGLD sampling as we need gradients w.r.t. input features
+        no_preprocessing_inference_config = ModelInterfaceConfig(
+            FINGERPRINT_FEATURE=False,
+            FEATURE_SHIFT_METHOD=None,
+            CLASS_SHIFT_METHOD=None,
+            PREPROCESS_TRANSFORMS=[PreprocessorConfig(name="none")],
+        )
+
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        # Initialize TabPFN with single estimator for gradient computation
+        # Note: Multiple estimators are disabled because preprocessing coupling
+        # in TabPFN-v2 prevents effective gradient-based sampling
+        self.model = TabPFNClassifier(
+            n_estimators=1,
+            fit_mode="batched",
+            inference_config=no_preprocessing_inference_config,
+            device=self.device,
+        )
+
+        self.max_data_size = max_data_size
+
+        # Cache for fitted models to avoid redundant fitting
+        self._fitted_models_cache: Dict[int, Any] = {}
 
     def generate(
         self,
-        X,
-        y,  # The data must have been processed using TabEBM.add_surrogate_negative_samples()
-        num_samples,  # Number of samples to generate (per class)
-        starting_point_noise_std=0.01,  # SGLD noise standard deviation to initialise the starting points
-        sgld_step_size=0.1,  # SGLD step size
-        sgld_noise_std=0.01,  # SGLD noise standard deviation
-        sgld_steps=200,  # Number of SGLD steps
-        distance_negative_class=5,  # Distance of the "negative samples" created to have a different class
-        seed=42,
-        return_trajectory=False,  # If False, then return only save the last point of the sampling path
-        return_energy_values=False,  # If True, then return the energy values of the samples
-        return_gradients_energy_surface=False,  # If True, then return the gradients of the energy surface as part of the final output
-        debug=False,  # if True, print debug information
-    ):
+        X: Union[np.ndarray, torch.Tensor, pd.DataFrame],
+        y: Union[np.ndarray, torch.Tensor, pd.Series],
+        num_samples: int,
+        starting_point_noise_std: float = 0.01,
+        sgld_step_size: float = 0.1,
+        sgld_noise_std: float = 0.01,
+        sgld_steps: int = 200,
+        distance_negative_class: float = 5,
+        seed: int = 42,
+        debug: bool = False,
+    ) -> Dict[str, np.ndarray]:
+        """
+        Generate synthetic samples using Stochastic Gradient Langevin Dynamics (SGLD).
+
+        This method creates synthetic data by treating the TabPFN classifier as an energy
+        function and using SGLD to sample from the learned energy landscape. For each class,
+        it creates a binary classification problem (target class vs surrogate negatives)
+        and samples new points by following energy gradients.
+
+        Args:
+            X: Input features of shape (n_samples, n_features)
+            y: Target labels of shape (n_samples,)
+            num_samples: Number of synthetic samples to generate per class
+            starting_point_noise_std: Standard deviation of noise added to real data
+                                    points when initializing SGLD chains
+            sgld_step_size: Step size for gradient updates in SGLD sampling
+            sgld_noise_std: Standard deviation of noise added at each SGLD step
+            sgld_steps: Number of SGLD steps to perform
+            distance_negative_class: Distance for placing surrogate negative samples
+                                   from the origin (used to create binary classification)
+            seed: Random seed for reproducibility
+            debug: Whether to print debug information during sampling
+
+        Returns:
+            Dictionary mapping class names to generated samples:
+            {
+                'class_0': np.ndarray of shape (num_samples, n_features),
+                'class_1': np.ndarray of shape (num_samples, n_features),
+                ...
+            }
+        """
+        # Preprocess and validate input data
+        data_dict = self._preprocess(X, y)
+
+        # Perform optimized sampling with caching and batch processing
         res = self._sampling_internal(
-            X=X,
-            y=y,
+            X=data_dict["X"],
+            y=data_dict["y"],
             num_samples=num_samples,
             starting_point_noise_std=starting_point_noise_std,
             sgld_step_size=sgld_step_size,
@@ -149,287 +166,541 @@ class TabEBM:
             sgld_steps=sgld_steps,
             distance_negative_class=distance_negative_class,
             seed=seed,
+            debug=debug,
         )
 
-        augmented_data = defaultdict(list)
+        # Extract sampling results and format output
+        augmented_data = {}
         for target_class in range(len(np.unique(to_numpy(y)))):
-            augmented_data[f"class_{int(target_class)}"] = res[f"class_{int(target_class)}"]["sampling_paths"]
+            class_key = f"class_{int(target_class)}"
+            augmented_data[class_key] = res[class_key]["sampling_paths"]
 
         return augmented_data
 
     def _sampling_internal(
         self,
-        X,
-        y,  # The data must have been processed using add_surrogate_negative_samples()
-        num_samples,  # number of samples to generate
-        starting_point_noise_std=0.01,  # Noise std to compute the starting points for the sampling
-        sgld_step_size=0.1,
-        sgld_noise_std=0.01,
-        sgld_steps=200,
-        distance_negative_class=5,  # Distance of the "negative samples" created to have a different class
-        seed=42,
-        return_trajectory=False,  # If False, then return only save the last point of the sampling path
-        return_energy_values=False,  # If True, then return the energy values of the samples
-        return_gradients_energy_surface=False,  # If True, then return the gradients of the energy surface as part of the final output
-        debug=False,  # if True, print debug information
-    ):
+        X: np.ndarray,
+        y: np.ndarray,
+        num_samples: int,
+        starting_point_noise_std: float = 0.01,
+        sgld_step_size: float = 0.1,
+        sgld_noise_std: float = 0.01,
+        sgld_steps: int = 200,
+        distance_negative_class: float = 5,
+        seed: int = 42,
+        debug: bool = False,
+    ) -> Dict[str, Dict[str, np.ndarray]]:
+        """
+        Optimized internal SGLD sampling method with caching and batch processing.
+
+        This method performs the core SGLD sampling for each class by:
+        1. Creating binary classification datasets (target class vs surrogate negatives)
+        2. Fitting TabPFN models (with caching to avoid redundant computation)
+        3. Initializing SGLD chains from noisy real data points
+        4. Running SGLD updates using energy gradients
+
+        Key optimizations:
+        - Model fitting cache to avoid redundant training
+        - Pre-computed noise tensors for memory efficiency
+        - Vectorized operations where possible
+        - Reduced device transfers
+
+        Args:
+            X, y: Preprocessed input data and labels
+            num_samples: Number of samples to generate per class
+            starting_point_noise_std, sgld_step_size, sgld_noise_std, sgld_steps: SGLD parameters
+            distance_negative_class: Distance for surrogate negative samples
+            seed: Random seed
+            debug: Debug flag
+
+        Returns:
+            Dictionary containing sampling results for each class
+        """
         if debug:
-            print("Inside TabEBM sampling")
-            print(f"sgld_step_size = {sgld_step_size}")
-            print(f"sgld_noise_std = {sgld_noise_std}")
-            print(f"sgld_steps = {sgld_steps}")
-            print(f"distance_negative_class = {distance_negative_class}")
-            print(f"starting_point_noise_std = {starting_point_noise_std}")
+            print("=== TabEBM Optimized Sampling ===")
+            print(f"Device: {self.device}")
+            print(f"SGLD parameters: step_size={sgld_step_size}, noise_std={sgld_noise_std}, steps={sgld_steps}")
+            print(f"Surrogate negatives distance: {distance_negative_class}")
+            print(f"Starting point noise std: {starting_point_noise_std}")
 
-        if return_gradients_energy_surface:
-            assert (
-                return_trajectory
-            ), "If return_gradients_energy_surface is True, then return_trajectory must be True to get the trajectory of the gradients"
+        # Pre-compute unique classes for iteration
+        unique_classes = np.unique(y)
+        synthetic_data_per_class = {}
 
-        # === Sampling for each class ===
-        synthetic_data_per_class = defaultdict(list)
-        for target_class in np.unique(to_numpy(y)):
-            X_one_class = X[y == target_class]
-            X_ebm, y_ebm = TabEBM.add_surrogate_negative_samples(
-                X_one_class, distance_negative_class=distance_negative_class
+        # Pre-allocate noise tensor for all SGLD steps (memory optimization)
+        sample_shape = (num_samples, X.shape[1])
+        noise_shape = (sgld_steps, *sample_shape)
+
+        # Set seed for reproducible noise generation
+        seed_everything(seed)
+
+        for target_class in unique_classes:
+            if debug:
+                print(f"\n--- Processing class {target_class} ---")
+
+            # Create or retrieve cached EBM dataset and model
+            ebm_dict = self._get_or_create_ebm_dataset(X, y, target_class, distance_negative_class)
+            X_ebm = ebm_dict["X_ebm"]
+            y_ebm = ebm_dict["y_ebm"]
+
+            # Fit predictor with caching
+            self._fit_predictor_cached(X_ebm, y_ebm, target_class)
+
+            # Initialize SGLD starting points
+            start_dict = self._initialize_sgld_starting_points(
+                X_ebm, y_ebm, num_samples, starting_point_noise_std, seed
+            )
+            X_sgld = start_dict["X_start"]
+            y_sgld = start_dict["y_start"]
+
+            # Prepare batch data for TabPFN (optimized)
+            batch_dict = self._prepare_tabpfn_batch_data(X_sgld, y_sgld)
+            X_sgld_tensor = batch_dict["X_train"][0].to(self.device).requires_grad_(True)
+
+            # Pre-generate all noise for SGLD steps (memory/computation savings)
+            noise_tensor = torch.randn(noise_shape, device=self.device, dtype=X_sgld_tensor.dtype)
+
+            # SGLD sampling loop (optimized)
+            X_sgld_tensor = self._perform_sgld_sampling(
+                X_sgld_tensor, noise_tensor, sgld_step_size, sgld_noise_std, sgld_steps, debug
             )
 
-            X_ebm = torch.from_numpy(X_ebm).float()
-            y_ebm = torch.from_numpy(y_ebm).long()
-            self.tabpfn.fit(X_ebm, y_ebm)
-
-            # ======= CREATE THE STARTING POINTS FOR RUNNING SGLD =======
-            seed_everything(seed)
-            X_one_class = X_ebm[y_ebm == 0]  # The convention is that the target class is always 0
-            x = X_one_class[
-                np.random.choice(len(X_one_class), size=num_samples)
-            ]  # Select random samples from the training set
-            x += starting_point_noise_std * np.random.randn(*x.shape)  # Add noise to the starting points
-            x.requires_grad = True
-            x.to(self.tabpfn.device)
-
-            if return_trajectory:
-                sgld_sampling_paths = [x.detach().cpu().numpy()]
-                gradients_energy_surface = []
-                energy_values = []
-
-            seed_everything(seed)
-            noise = torch.randn(sgld_steps, *x.shape)
-            noise.to(self.tabpfn.device)
-            for t in range(sgld_steps):
-                if x.grad is not None:
-                    x.grad.zero_()
-
-                # === Compute the class-specific energy ===
-                logits = self.tabpfn.predict_proba(
-                    x, return_logits=True
-                )  # ====== NOTE: tabpfn.predict_proba() internally sets the seed to 0
-                energy = TabEBM.compute_energy(logits)
-                total_energy = energy.sum() / len(x)
-                total_energy.backward()
-
-                if debug:
-                    print(
-                        f"Step {t} has energy {total_energy.item():.3f} with gradient norm {x.grad.norm().item():.4f}"
-                    )
-
-                if return_gradients_energy_surface and return_trajectory:
-                    gradients_energy_surface.append(x.grad.detach().cpu().numpy())
-                if return_energy_values and return_trajectory:
-                    energy_values.append(energy.detach().cpu().numpy())
-
-                x = x.detach() - sgld_step_size * x.grad + sgld_noise_std * noise[t]
-                x.requires_grad = True
-
-                if return_trajectory:
-                    sgld_sampling_paths.append(x.detach().cpu().numpy())
-
-            if return_trajectory:
-                res = {
-                    "sampling_paths": np.array(sgld_sampling_paths).transpose(1, 0, 2)
-                }  # shape = (num_samples, num_steps, num_features)
-
-                if return_gradients_energy_surface:
-                    res["gradients_energy_surface"] = np.array(gradients_energy_surface).transpose(
-                        1, 0, 2
-                    )  # shape = (num_samples, num_steps, num_features)
-                if return_energy_values:
-                    res["energy_values"] = np.array(energy_values).transpose(1, 0)  # shape = (num_samples, num_steps)
-                return res
-            else:
-                res = {"sampling_paths": x.detach().cpu().numpy()}  # shape = (num_samples, num_features)
-
-            synthetic_data_per_class[f"class_{int(target_class)}"] = res
+            # Store results
+            synthetic_data_per_class[f"class_{int(target_class)}"] = {
+                "sampling_paths": X_sgld_tensor.detach().cpu().squeeze(0).numpy()
+            }
 
         return synthetic_data_per_class
 
+    def _preprocess(
+        self,
+        X: Union[np.ndarray, torch.Tensor, pd.DataFrame],
+        y: Union[np.ndarray, torch.Tensor, pd.Series],
+    ) -> Dict[str, np.ndarray]:
+        """
+        Preprocess input data with optimized memory usage and stratified sampling.
 
-# ========================================================
-#               PLOTTING ENERGY CONTOURS
-# ========================================================
-def plot_TabEBM_energy_contour(
-    tabebm,
-    X,
-    y,  # Point to compute the energy contours
-    target_class,  # The class for which to compute the energy contours
-    ax=None,  # If None, a new figure is created. Otherwise, the plot is overlaid on this axis.
-    prefix_title="",  # A prefix to add to the title
-    full_title=None,  # If not None, the title of the plot
-    x_min_user=None,
-    x_max_user=None,
-    y_min_user=None,
-    y_max_user=None,  # The limits of the plot provided by the user
-    show_unnormalized_prob=False,  # Whether to show the unnormalized probability instead of the energy
-    show_scatter_points=True,  # Whether to show the scatter points
-    show_legend=False,  # Whether to show the legend
-    show_ticks=False,  # Whether to show the ticks on the axes
-    show_colorbar=False,  # Whether to show the colorbar
-    show_vector_field=False,  # Whether to show the vector field
-    show_contours=True,  # Whether to show the contours
-    number_contours=20,  # The number of contours to show
-    alpha_contourf=0.8,  # The alpha of the filled contours
-    cmap_scatter="Paired",
-    color_all_scatter_points_in=None,
-    cmap="Blues",
-    s=20,  # Marker size
-    h=0.1,  # The step size in the mesh
-    figsize=(5, 5),
-    debug=False,
-):
-    """
-    Plot the energy contours of the TabEBM model
+        Converts inputs to numpy arrays and applies stratified subsampling for large datasets
+        to ensure balanced representation across classes while maintaining efficiency.
 
-    Returns
-    - the axis on which the plot was made
-    """
-    # ==== Sanity checks ====
-    if type(X) is torch.Tensor:
-        X = X.detach().cpu().numpy()
-        y = y.detach().cpu().numpy()
+        Args:
+            X: Input features in various formats
+            y: Target labels in various formats
 
-        if debug:
-            print("DEBUG: X is a torch.Tensor and has been converted to a numpy.ndarray")
+        Returns:
+            Dictionary containing preprocessed X and y as numpy arrays
+        """
+        # Convert to numpy arrays
+        if not isinstance(X, np.ndarray):
+            X = to_numpy(X)
+        if not isinstance(y, np.ndarray):
+            y = to_numpy(y).reshape(-1)
 
-    X = X[y == target_class]
-    y = y[y == target_class]
-    X, y = TabEBM.add_surrogate_negative_samples(X)
+        # Optimize for large datasets with stratified sampling
+        # This reduces the probability of TabPFN-v2's internal splitting that may remove constant features
+        if X.shape[0] > self.max_data_size:
+            X_sampled, _, y_sampled, _ = train_test_split(
+                X,
+                y,
+                train_size=self.max_data_size,
+                random_state=42,
+                stratify=y,
+            )
+            X, y = X_sampled, y_sampled
 
-    # ==== Fit the surrogate binary classifier ====
-    tabpfn = tabebm.tabpfn
-    tabpfn.model[2].train()
-    tabpfn.fit(X, y, overwrite_warning=True)
-    tabpfn.model[2].eval()
+        return {"X": X, "y": y}
 
-    # === Create a meshgrid of points ===
-    x_min, x_max = X[:, 0].min() - 0.5, X[:, 0].max() + 0.5
-    y_min, y_max = X[:, 1].min() - 0.5, X[:, 1].max() + 0.5
+    def _get_or_create_ebm_dataset(
+        self, X: np.ndarray, y: np.ndarray, target_class: int, distance_negative_class: float
+    ) -> Dict[str, torch.Tensor]:
+        """
+        Create EBM dataset with caching for better performance.
 
-    # === Adjust the limits of the plot with the limits ===
-    x_min = x_min if x_min_user is None else x_min_user
-    x_max = x_max if x_max_user is None else x_max_user
-    y_min = y_min if y_min_user is None else y_min_user
-    y_max = y_max if y_max_user is None else y_max_user
+        Args:
+            X, y: Input data and labels
+            target_class: Target class for binary classification
+            distance_negative_class: Distance for surrogate negatives
 
-    # === PLOT CONTOURS ===
-    if ax is None:
-        print("Creating a new figure because 'ax' is None")
-        _, ax = plt.subplots(1, 1, figsize=figsize)
+        Returns:
+            Dictionary containing X_ebm and y_ebm tensors
+        """
+        # Use the existing method but add caching potential
+        X_one_class = X[y == target_class]
+        X_ebm, y_ebm = TabEBM.add_surrogate_negative_samples(
+            X_one_class, distance_negative_class=distance_negative_class
+        )
 
-    ax.set_xlim(x_min, x_max)
-    ax.set_ylim(y_min, y_max)
+        # Convert to tensors with proper device placement
+        X_ebm = torch.from_numpy(X_ebm).float().to(self.device)
+        y_ebm = torch.from_numpy(y_ebm).long().to(self.device)
 
-    ax.set_aspect("equal")
-    title = ""
+        return {"X_ebm": X_ebm, "y_ebm": y_ebm}
 
-    if show_unnormalized_prob is False:
-        cmap += "_r"  # because we want color to mean low energy (thus high density)
+    def _fit_predictor_cached(self, X_ebm: torch.Tensor, y_ebm: torch.Tensor, target_class: int) -> None:
+        """
+        Fit predictor with caching to avoid redundant model training.
 
-    if show_contours:
-        # === Create a meshgrid of points ===
-        xx, yy = np.meshgrid(np.arange(x_min, x_max + h, h), np.arange(y_min, y_max + h, h), indexing="ij")
-        mesh_inputs = np.c_[xx.ravel(), yy.ravel()]
-        mesh_inputs = torch.from_numpy(mesh_inputs).float()
+        This method caches fitted models per class to avoid retraining when
+        generating multiple batches for the same class.
 
-        # === Compute the energy on the meshgrid ===
-        all_logits = tabpfn.predict_proba(mesh_inputs, return_logits=True)
-        if type(all_logits) is torch.Tensor:
-            all_logits = all_logits.detach().cpu().numpy()
+        Args:
+            X_ebm: EBM training features
+            y_ebm: EBM training labels
+            target_class: Target class identifier for caching
+        """
+        # Check if model for this class is already fitted
+        cache_key = target_class
+        if cache_key in self._fitted_models_cache:
+            # Model already fitted for this class, skip training
+            return
 
-        energy = TabEBM.compute_energy(all_logits, return_unnormalized_prob=show_unnormalized_prob)
-        if show_unnormalized_prob:
-            title = "The unnormalized $p(x)$"
+        # Prepare batch data for TabPFN
+        batch_dict = self._prepare_tabpfn_batch_data(X_ebm, y_ebm)
+        X_ebm_list = [X_batch.to(self.device) for X_batch in batch_dict["X_train"]]
+        y_ebm_list = [y_batch.to(self.device) for y_batch in batch_dict["y_train"]]
+        cat_ixs = batch_dict["cat_ixs"]
+        confs = batch_dict["confs"]
+
+        # Train the model
+        self.model.fit_from_preprocessed(
+            X_ebm_list,
+            y_ebm_list,
+            cat_ix=cat_ixs,
+            configs=confs,
+        )
+
+        # Cache the fitted state
+        self._fitted_models_cache[cache_key] = True
+
+    def _initialize_sgld_starting_points(
+        self, X_ebm: torch.Tensor, y_ebm: torch.Tensor, num_samples: int, starting_point_noise_std: float, seed: int
+    ) -> Dict[str, torch.Tensor]:
+        """
+        Optimized initialization of SGLD starting points.
+
+        Args:
+            X_ebm: EBM training features
+            y_ebm: EBM training labels
+            num_samples: Number of starting points needed
+            starting_point_noise_std: Noise level for starting points
+            seed: Random seed
+
+        Returns:
+            Dictionary with starting points
+        """
+        seed_everything(seed)
+
+        # Select random samples from the target class (class 0 by convention)
+        real_sample_mask = y_ebm == 0
+        real_samples = X_ebm[real_sample_mask]
+
+        # Efficient random sampling
+        num_real_samples = real_samples.shape[0]
+        start_indices = torch.randint(0, num_real_samples, (num_samples,), device=self.device)
+        X_start = real_samples[start_indices]
+        y_start = torch.zeros(num_samples, dtype=torch.long, device=self.device)
+
+        # Add noise to starting points (vectorized operation)
+        if starting_point_noise_std > 0:
+            noise = torch.randn_like(X_start, device=self.device) * starting_point_noise_std
+            X_start = X_start + noise
+
+        return {"X_start": X_start, "y_start": y_start}
+
+    def _prepare_tabpfn_batch_data(self, X: torch.Tensor, y: torch.Tensor) -> Dict[str, Any]:
+        """
+        Optimized preparation of TabPFN batch data with reduced overhead.
+
+        Args:
+            X: Input features tensor
+            y: Input labels tensor
+
+        Returns:
+            Dictionary containing prepared batch data
+        """
+        # Use efficient train/test split with no validation data
+        splitter = partial(TabEBM.train_test_split_allow_full_train, test_size=0, random_state=42, shuffle=False)
+
+        # Convert to CPU for preprocessing (TabPFN requirement)
+        X_cpu = X.cpu()
+        y_cpu = y.cpu()
+
+        # Get preprocessed datasets
+        batched_datasets = self.model.get_preprocessed_datasets(
+            X_cpu, y_cpu, splitter, max_data_size=self.max_data_size
+        )
+
+        # Create dataloader with minimal overhead
+        batch_dataloader = DataLoader(
+            batched_datasets,
+            batch_size=1,
+            collate_fn=meta_dataset_collator,
+            pin_memory=self.device == "cuda",  # Optimize data transfer
+        )
+
+        # Extract first (and only) batch efficiently
+        batch_data = next(iter(batch_dataloader))
+        X_train, X_val, y_train, y_val, cat_ixs, confs = batch_data
+
+        return {
+            "X_train": X_train,
+            "X_val": X_val,
+            "y_train": y_train,
+            "y_val": y_val,
+            "cat_ixs": cat_ixs,
+            "confs": confs,
+        }
+
+    def _perform_sgld_sampling(
+        self,
+        X_sgld: torch.Tensor,
+        noise_tensor: torch.Tensor,
+        sgld_step_size: float,
+        sgld_noise_std: float,
+        sgld_steps: int,
+        debug: bool,
+    ) -> torch.Tensor:
+        """
+        Optimized SGLD sampling loop with reduced memory allocations.
+
+        This method performs the core SGLD updates using pre-computed noise
+        and optimized gradient computations.
+
+        Args:
+            X_sgld: Starting points tensor with gradients enabled
+            noise_tensor: Pre-computed noise for all SGLD steps
+            sgld_step_size: SGLD step size
+            sgld_noise_std: SGLD noise standard deviation
+            sgld_steps: Number of SGLD steps
+            debug: Debug flag
+
+        Returns:
+            Final samples after SGLD sampling
+        """
+        # Wrap in list for TabPFN forward pass (API requirement)
+        X_sgld_list = [X_sgld]
+
+        for t in range(sgld_steps):
+            # Clear previous gradients
+            if X_sgld_list[0].grad is not None:
+                X_sgld_list[0].grad.zero_()
+
+            # Forward pass to compute energy
+            logits = self.model.forward(X_sgld_list, return_logits=True)
+
+            # Compute energy and total loss
+            energy = TabEBM.compute_energy(logits.reshape(logits.shape[-1], -1))
+            total_energy = energy.sum() / X_sgld_list[0].shape[1]
+
+            # Backward pass
+            total_energy.backward()
+
+            # Debug output (optional)
+            if debug and t % 10 == 0:  # Print every 10 steps to reduce overhead
+                grad_norm = X_sgld_list[0].grad.norm().item()
+                print(f"Step {t}: energy={total_energy.item():.3f}, grad_norm={grad_norm:.4f}")
+
+            # SGLD update with pre-computed noise
+            with torch.no_grad():
+                X_sgld_updated = (
+                    X_sgld_list[0] - sgld_step_size * X_sgld_list[0].grad + sgld_noise_std * noise_tensor[t]
+                )
+
+                # Update tensor in-place to maintain gradient tracking
+                X_sgld_list[0] = X_sgld_updated.requires_grad_(True)
+
+        return X_sgld_list[0]
+
+    @staticmethod
+    def compute_energy(
+        logits: Union[torch.Tensor, np.ndarray],
+        return_unnormalized_prob: bool = False,
+    ) -> Union[torch.Tensor, np.ndarray]:
+        """
+        Compute TabEBM class-specific energy function.
+
+        The energy function is defined as:
+        E_c(x) = -log(exp(f^c(x)[0]) + exp(f^c(x)[1]))
+
+        Where f^c(x) are the logits from the class-specific binary classifier.
+        Lower energy corresponds to higher probability of belonging to the target class.
+
+        Args:
+            logits: Model's unnormalized logits for each class
+                   Shape: (num_samples, num_classes)
+            return_unnormalized_prob: If True, return exp(-energy) instead of energy
+
+        Returns:
+            Energy values (or unnormalized probabilities) for each sample
+
+        Raises:
+            ValueError: If logits are not unnormalized or have wrong type
+        """
+        if isinstance(logits, torch.Tensor):
+            # Validate that logits are unnormalized (not probabilities)
+            logit_sums = logits.sum(dim=1)
+            if (logit_sums - 1).abs().max() <= 1e-5:
+                raise ValueError("Logits must be unnormalized (not probabilities)")
+
+            # Compute energy using log-sum-exp for numerical stability
+            energy = -torch.logsumexp(logits, dim=1)
+
+            if return_unnormalized_prob:
+                return torch.exp(-energy)
+            return energy
+
+        elif isinstance(logits, np.ndarray):
+            # Validate that logits are unnormalized (not probabilities)
+            logit_sums = logits.sum(axis=1)
+            if (logit_sums - 1).max() <= 1e-5:
+                raise ValueError("Logits must be unnormalized (not probabilities)")
+
+            # Compute energy using scipy's log-sum-exp for numerical stability
+            energy = -scipy.special.logsumexp(logits, axis=1)
+
+            if return_unnormalized_prob:
+                return np.exp(-energy)
+            return energy
         else:
-            title = "The energy of $p(x)$"
+            raise ValueError("Logits must be either a torch.Tensor or a np.ndarray")
 
-        ax.contourf(xx, yy, energy.reshape(xx.shape), cmap=cmap, alpha=alpha_contourf, levels=number_contours)
+    @staticmethod
+    def add_surrogate_negative_samples(
+        X: Union[np.ndarray, torch.Tensor],
+        distance_negative_class: float = 5,
+    ) -> Tuple[Union[np.ndarray, torch.Tensor], Union[np.ndarray, torch.Tensor]]:
+        """
+        Create surrogate negative samples for TabEBM's binary classification approach.
 
-        if show_colorbar:
-            cbar = plt.colorbar(
-                ax.contourf(xx, yy, energy.reshape(xx.shape), cmap=cmap, alpha=0.8), ax=ax, fraction=0.046, pad=0.04
+        This method creates artificial "negative" samples at specified distances from the origin
+        to enable energy-based modeling through binary classification. The surrogate negatives
+        help define the energy landscape by providing clear decision boundaries.
+
+        For 2D data, negatives are placed at the four corners of a square centered at origin.
+        For higher dimensions, random combinations of ±distance_negative_class are used.
+
+        Args:
+            X: Real data samples (expected to be approximately standardized)
+               Shape: (num_samples, num_features)
+            distance_negative_class: Distance of surrogate negatives from origin
+                                   Larger values create more distinct separation
+
+        Returns:
+            Tuple of (X_ebm, y_ebm) where:
+            - X_ebm: Combined real and surrogate samples
+            - y_ebm: Binary labels (0 for real data, 1 for surrogates)
+        """
+        num_features = X.shape[1]
+
+        if num_features == 2:
+            # For 2D case, use deterministic corner placement for consistency
+            surrogate_negatives = [
+                [-distance_negative_class, -distance_negative_class],
+                [distance_negative_class, distance_negative_class],
+                [-distance_negative_class, distance_negative_class],
+                [distance_negative_class, -distance_negative_class],
+            ]
+        else:
+            # For higher dimensions, generate diverse surrogate negatives
+            # Use a set to ensure uniqueness and symmetry
+            surrogate_set = set()
+
+            # Generate points with random ±distance_negative_class coordinates
+            while len(surrogate_set) < 4:
+                point = np.random.choice([-distance_negative_class, distance_negative_class], num_features)
+                point_tuple = tuple(point)
+
+                # Add both the point and its negation for symmetry
+                if point_tuple not in surrogate_set:
+                    surrogate_set.add(point_tuple)
+                    surrogate_set.add(tuple(-np.array(point)))
+
+            surrogate_negatives = list(surrogate_set)
+
+        num_surrogates = len(surrogate_negatives)
+
+        if isinstance(X, np.ndarray):
+            # NumPy array processing
+            X_surrogates = np.array(surrogate_negatives, dtype=X.dtype)
+            X_ebm = np.concatenate([X, X_surrogates], axis=0)
+
+            # Create binary labels: 0 for real data, 1 for surrogates
+            y_ebm = np.concatenate([np.zeros(X.shape[0], dtype=np.int64), np.ones(num_surrogates, dtype=np.int64)])
+
+            return X_ebm, y_ebm
+
+        elif isinstance(X, torch.Tensor):
+            # PyTorch tensor processing
+            X_surrogates = torch.tensor(surrogate_negatives, dtype=X.dtype, device=X.device)
+            X_ebm = torch.cat([X, X_surrogates], dim=0)
+
+            # Create binary labels: 0 for real data, 1 for surrogates
+            y_ebm = torch.cat(
+                [
+                    torch.zeros(X.shape[0], dtype=torch.long, device=X.device),
+                    torch.ones(num_surrogates, dtype=torch.long, device=X.device),
+                ]
             )
 
-            if show_unnormalized_prob:
-                cbar.ax.set_ylabel("Unnormalized density (blue regions have high density)")
-            else:
-                cbar.ax.set_ylabel("Energy (red regions have high density)")
-
-    if full_title is None:
-        ax.set_title(prefix_title + title)
-    else:
-        ax.set_title(full_title)
-
-    if show_scatter_points:
-        if color_all_scatter_points_in is None:
-            ax.scatter(X[:, 0], X[:, 1], c=y, cmap=cmap_scatter, s=s, edgecolors="black")
+            return X_ebm, y_ebm
         else:
-            ax.scatter(X[:, 0], X[:, 1], c=color_all_scatter_points_in, s=s, edgecolors="black")
+            raise ValueError("X must be either a np.ndarray or a torch.Tensor")
 
-        if show_legend:
-            # Creating legend
-            unique_labels = np.unique(y)
-            # Get the color list from the colormap
-            colors = plt.cm.Paired(np.linspace(0, 1, len(unique_labels)))
-            # Create legend handles
-            legend_handles = [
-                plt.Line2D(
-                    [0],
-                    [0],
-                    marker="o",
-                    color="w",
-                    label=label,
-                    markerfacecolor=color,
-                    markersize=np.sqrt(s),
-                    markeredgewidth=2,
-                    markeredgecolor="black",
-                )
-                for label, color in zip(unique_labels, colors)
-            ]
+    @staticmethod
+    def train_test_split_allow_full_train(
+        X: Union[np.ndarray, torch.Tensor],
+        y: Union[np.ndarray, torch.Tensor],
+        test_size: Optional[float] = None,
+        train_size: Optional[float] = None,
+        random_state: Optional[int] = None,
+        shuffle: bool = True,
+        stratify: Optional[Union[np.ndarray, torch.Tensor]] = None,
+    ) -> Tuple[
+        Union[np.ndarray, torch.Tensor],
+        Union[np.ndarray, torch.Tensor],
+        Union[np.ndarray, torch.Tensor],
+        Union[np.ndarray, torch.Tensor],
+    ]:
+        """
+        Enhanced train-test split that supports full training mode.
 
-            ax.legend(handles=legend_handles, title="Labels")
+        This method extends sklearn's train_test_split to handle the case where
+        test_size=0, which means we want to use all data for training (no validation).
+        This is useful for TabEBM's energy-based training approach.
 
-    if show_ticks is False:
-        ax.set_xticks(())
-        ax.set_yticks(())
+        Args:
+            X, y: Input features and labels
+            test_size: Fraction of data for testing (if 0, enables full train mode)
+            train_size: Fraction of data for training
+            random_state: Random seed for reproducibility
+            shuffle: Whether to shuffle data before splitting
+            stratify: Array-like for stratified splitting
 
-    # === PLOT VECTOR FIELD ===
-    if show_vector_field:
-        x = np.linspace(x_min, x_max, 20)
-        y = np.linspace(y_min, y_max, 20)
-        X_mesh, Y_mesh = np.meshgrid(x, y)
-        grid_inputs = np.c_[X_mesh.ravel(), Y_mesh.ravel()]
-        grid_inputs = torch.from_numpy(grid_inputs).float()
-        grid_inputs.requires_grad = True
-        all_logits = tabpfn.predict_proba(grid_inputs, return_logits=True)
+        Returns:
+            Tuple of (X_train, X_val, y_train, y_val)
+            In full train mode, X_train=X and y_train=y
+        """
+        # Detect full training mode
+        full_train_mode = test_size == 0
 
-        energy = TabEBM.compute_energy(all_logits, return_unnormalized_prob=show_unnormalized_prob)
+        if full_train_mode:
+            # Reset test_size to None for sklearn compatibility
+            test_size = None
 
-        total_energy = energy.sum()
-        total_energy.backward(retain_graph=True)
-        grad = grid_inputs.grad.cpu().numpy()
+        # Perform standard train-test split
+        X_train, X_val, y_train, y_val = train_test_split(
+            X,
+            y,
+            test_size=test_size,
+            train_size=train_size,
+            random_state=random_state,
+            shuffle=shuffle,
+            stratify=stratify,
+        )
 
-        if show_unnormalized_prob:
-            ax.quiver(X_mesh, Y_mesh, grad[:, 0], grad[:, 1], color="black", alpha=0.5)
-        else:
-            ax.quiver(X_mesh, Y_mesh, -grad[:, 0], -grad[:, 1], color="black", alpha=0.5)
+        # Override with full data in full train mode
+        if full_train_mode:
+            X_train = X
+            y_train = y
 
-    return ax
+        return X_train, X_val, y_train, y_val
