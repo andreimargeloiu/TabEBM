@@ -43,8 +43,9 @@ For attribution in academic contexts, please cite this work as:
 ## 🔑 Features
 
 - `TabEBM.py` contains (i) the implementation of TabEBM, and (ii) a helper function `plot_TabEBM_energy_contour` to show the energy contour (or unnormalized probability) approximated by TabEBM
-- `TabEBM_approximated_density.ipynb` shows the TabEBM approximation of the density of the real data distribution
-- `TabEBM_generate_data.ipynb` shows how to generate data using TabEBM
+- `tutorial1_generate_data.ipynb` shows how to generate data using TabEBM
+- `tutorial2_augment_real_world_data.ipynb` shows how to augment real-world data using TabEBM
+- `tutorial3_approximated_density.ipynb` shows the TabEBM approximation of the density of the real data distribution
 
 ## 🚀 Installation
 
@@ -86,7 +87,11 @@ pip install .
     # augmented_data[class_id] = numpy.ndarray of generated data for a specific ’’class_id‘‘
     ```
 
-- [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/andreimargeloiu/TabEBM/blob/main/tutorials/tutorial2_approximated_density.ipynb) [Tutorial 2: Analyse the learned data distribution by TabEBM](https://github.com/andreimargeloiu/TabEBM/blob/main/tutorials/tutorial2_approximated_density.ipynb)
+- [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/andreimargeloiu/TabEBM/blob/main/tutorials/tutorial2_augment_real_world_data.ipynb) [Tutorial 2: Augment real-world data with TabEBM](https://github.com/andreimargeloiu/TabEBM/blob/main/tutorials/tutorial2_augment_real_world_data.ipynb)
+
+  - We provide a click-to-run example of using TabEBM to augment a real-world datasets for improved downstream performance.
+
+- [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/andreimargeloiu/TabEBM/blob/main/tutorials/tutorial3_approximated_density.ipynb) [Tutorial 3: Analyse the learned data distribution by TabEBM](https://github.com/andreimargeloiu/TabEBM/blob/main/tutorials/tutorial3_approximated_density.ipynb)
 
   - The library allows computation of TabEBM’s energy function and the unnormalised data density.
 
@@ -97,7 +102,3 @@ pip install .
     plot_tabebm_probabilities(X, y, title_prefix='(noise=2)', h=0.2)
     plt.show()
     ```
-
-- [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/andreimargeloiu/TabEBM/blob/main/tutorials/tutorial3_augment_real_world_data.ipynb) [Tutorial 3: Augment real-world data with TabEBM](https://github.com/andreimargeloiu/TabEBM/blob/main/tutorials/tutorial3_augment_real_world_data.ipynb)
-
-  - We provide a minimal example of using TabEBM to augment a real-world datasets for improvied downstream performance.
